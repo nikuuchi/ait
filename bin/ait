@@ -1,0 +1,144 @@
+#!/usr/bin/env node
+
+var path = require('path');
+var fs   = require('fs');
+
+var HttpClient = require('../lib/httpclient').HttpClient;
+var printUsage = function() {
+    return {
+        all: function() {
+            var comment =
+                ["usage ait [command]",
+                "ait commands are:",
+                "  clone",
+                "  commit",
+                "  fork"];
+            for(var i = 0; i < comment.length; i++) {
+                console.log(comment[i]);
+            }
+        },
+
+        commit: function() {
+            var comment =
+                ["usage: ait commit -m [message]"];
+            for(var i = 0; i < comment.length; i++) {
+                console.log(comment[i]);
+            }
+        },
+
+        clone: function() {
+            var comment =
+                ["usage: ait clone [dcaseName]"];
+            for(var i = 0; i < comment.length; i++) {
+                console.log(comment[i]);
+            }
+        },
+
+        fork: function() {
+            var comment =
+                ["usage: ait fork [sourceDCaseName] [destDCasename]"];
+            for(var i = 0; i < comment.length; i++) {
+                console.log(comment[i]);
+            }
+        }
+    };
+};
+
+
+var Ait = (function(url) {
+    var TetzDown = require('../lib/tetzdown').TetzDown;
+    function Ait(url) {
+        this.http = new HttpClient(url);
+    }
+
+    function makeConfigData(data) {
+        data = data.result;
+        var ret = "";
+        ret = '{\n    "dcaseName":"' + data.dcaseName + '",\n    "commitId":' + data.commitId + ',\n    "TopGoalId":' + data.tree.TopGoalId + ',\n    "NodeCount":' + data.tree.NodeCount + '\n}';
+        return ret;
+    }
+
+    Ait.prototype.clone = function(name) {
+        this.http.post({dcaseId: name-0}, "getDCase", function(res){
+            console.log('STATUS: ' + res.statusCode);
+            console.log('HEADERS: ' + JSON.stringify(res.headers));
+            res.setEncoding('utf8');
+            res.on('data', function (chunk) {
+                var markDownData = JSON.stringify(JSON.parse(chunk).result);//TetzDown.Json2TetzDown(JSON.parse(chunk));
+                var configData   = makeConfigData(JSON.parse(chunk));
+                fs.mkdirSync('./'+name, '0777');
+                fs.writeFile('./'+name+'/'+name+'.md', markDownData, function (err) {
+                      if (err) throw err;
+                        console.log('./'+name+'/'+name+'.md');
+                });
+                fs.writeFile('./'+name+'/.ait', configData, function (err) {
+                      if (err) throw err;
+                        console.log('./'+name+'/.ait');
+                });
+            });
+        });
+    };
+
+    Ait.prototype.commit = function(arg, message) {
+        var self = this;
+        var dirname = process.cwd().split('/').slice(-1)[0];
+        fs.readFile(dirname+'.md', {encoding: 'utf8'}, function (err, data) {
+            var json = JSON.parse(data);
+            json.dcaseId = dirname-0;
+            json.userId  = 1; //FIXME
+            json.commitMessage = message;
+            self.http.post(json, "commit", function(res){
+                res.setEncoding('utf8');
+                res.on('data', function (chunk) {
+                    console.log(chunk);
+                });
+            });
+        });
+    };
+
+    Ait.prototype.fork = function(oldName, newName) { //TODO
+        self.http.post(json, "getDCase", function(res){
+            res.setEncoding('utf8');
+            res.on('data', function (chunk) {
+                console.log(chunk);
+            });
+        });
+    });
+
+    return Ait;
+})();
+
+(function() {
+    var args = process.argv.slice(2);
+    var ait = new Ait(args, "localhost/dcase/cgi");
+    var usage = printUsage();
+    if(args.length > 0) {
+        switch(args[0]) {
+            case 'commit':
+                if(args.length == 3) {
+                    ait.commit(args[1],args[2]);
+                } else {
+                    usage.commit();
+                }
+                break;
+            case 'clone':
+                if(args.length == 2) {
+                    ait.clone(args[1]);
+                } else {
+                    usage.clone();
+                }
+                break;
+            case 'fork':
+                if(args.length == 3) {
+                    ait.fork(args[1], args[2]);
+                } else {
+                    usage.fork();
+                }
+                break;
+            default:
+                usage.all();
+        }
+    } else {
+        usage.all();
+    }
+})();
